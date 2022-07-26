@@ -22,7 +22,7 @@ for folder, subfolders, files in os.walk('Stock_Growth/csv_files/'):
             os.remove(path)
 
 # Create temp.csv file for headers
-header = ['timestamp', 'open', 'high', 'low' , 'close' , 'adjusted close' , 'volume' , 'dividend amount' , 'ticker' , 'current value']
+header = ['timestamp' , 'open' , 'high' , 'low' , 'close' , 'adjusted close' , 'volume' , 'dividend amount' , 'ticker' , 'current value' , 'sort' , 'value' , 'inflation' , 'value_afi']
 
 with open('Stock_Growth/csv_files/temp.csv', 'w', encoding='UTF8') as f:
     writer1 = csv.writer(f)
@@ -30,23 +30,6 @@ with open('Stock_Growth/csv_files/temp.csv', 'w', encoding='UTF8') as f:
     # write the header
     writer1.writerow(header)
 
-# # Create stk_final.csv file for headers
-# header = ['timestamp' , 'close' , 'dividend amount' , 'ticker' , 'current value']
-
-# with open('Stock_Growth/csv_files/stk_final.csv', 'w', encoding='UTF8') as f:
-#     writer1 = csv.writer(f)
-
-#     # write the header
-#     writer1.writerow(header)
-
-# # Create inf_final.csv file for headers
-# header = ['sort' , 'timestamp' , 'value']
-
-# with open('Stock_Growth/csv_files/inf_final.csv', 'w', encoding='UTF8') as f:
-#     writer1 = csv.writer(f)
-
-#     # write the header
-#     writer1.writerow(header)
 
 def add_column_in_csv(input_file, output_file, transform_row):
     """ Append a column in existing csv using csv.reader / csv.writer classes"""
@@ -71,6 +54,39 @@ while SYMB_Input != "":
     SYMB_Input = input("Enter stock symbol. Press Enter/Return key when finished:")
     SYMBs.append(SYMB_Input)
 
+# //////////////////////////INFLATION\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+#
+
+# Inflation USD - Pull and save inflation data for US as "temp_inf.csv"
+infl = pd.read_csv("https://www.alphavantage.co/query?function=INFLATION&apikey=" + alpha_key + "&datatype=csv")   
+infl.head()
+
+infl.to_csv('Stock_Growth/csv_files/temp_inf.csv')
+
+#Change Date Formatting
+with open("Stock_Growth/csv_files/temp_inf.csv", 'r') as source:
+    with open("Stock_Growth/csv_files/temp_inf1.csv", 'w') as result:
+        writer1 = csv.writer(result, lineterminator='\n')
+        reader1 = csv.reader(source)
+        source.readline()
+        for row in reader1:
+            ts = dt.datetime.strptime(row[1], "%Y-%m-%d").strftime("%Y-%m")
+            
+            row[1]=ts
+            if ts != "":
+                writer1.writerow(row)
+source.close()
+result.close()
+
+# read contents of csv file
+file = pd.read_csv("Stock_Growth/csv_files/temp_inf1.csv")  
+# adding header
+headerList = ['sort' , 'timestamp' , 'value']  
+# converting data frame to csv
+file.to_csv("Stock_Growth/csv_files/temp_inf3.csv", header=headerList, index=False)
+
+# ////////////////////// STOCKS \\\\\\\\\\\\\\\\\\\\\\\\\\\
+
 # Stock performance - Loop through user defined stocks
 for SYMB in SYMBs:
     if SYMB == "":
@@ -91,96 +107,79 @@ for SYMB in SYMBs:
 
     csvData.to_csv("Stock_Growth/csv_files/temp_stk2.csv", index=False)
 
+#Change Date Formatting
+    with open("Stock_Growth/csv_files/temp_stk2.csv", 'r') as source:
+        with open("Stock_Growth/csv_files/temp_stk3.csv", 'w') as result:
+            writer2 = csv.writer(result, lineterminator='\n')
+            reader2 = csv.reader(source)
+            source.readline()
+            for row in reader2:
+                ts = dt.datetime.strptime(row[0], "%Y-%m-%d").strftime("%Y-%m")
+            
+                row[0]=ts
+                if ts != "":
+                    writer2.writerow(row)
+    source.close()
+    result.close()
+
+    # read contents of csv file
+    file = pd.read_csv("Stock_Growth/csv_files/temp_stk3.csv")  
+    # adding header
+    headerList = ['timestamp' , 'open' , 'high' , 'low' , 'close' , 'adjusted close' , 'volume' ,'dividend amount' , 'ticker']  
+    # converting data frame to csv
+    file.to_csv("Stock_Growth/csv_files/temp_stk4.csv", header=headerList, index=False)
+
     # Calculate Divident Growth
     base_value = 1
     c = []
-    df1 = pd.read_csv('Stock_Growth/csv_files/temp_stk2.csv')
+    df1 = pd.read_csv('Stock_Growth/csv_files/temp_stk4.csv')
     for i in range(len(df1['dividend amount'])):
         base_value = base_value / df1['close'][i] * df1['dividend amount'][i]  + base_value
         c.append(base_value)
     df1['current value'] = c
-    df1.to_csv('Stock_Growth/csv_files/temp_stk3.csv', index=False)
+    df1.to_csv('Stock_Growth/csv_files/temp_stk5.csv', index=False)
+
+    # Merge Stock and Inflation data
+    data1 = pd.read_csv('Stock_Growth/csv_files/temp_stk5.csv')
+    data2 = pd.read_csv('Stock_Growth/csv_files/temp_inf3.csv')
+  
+    # using merge function by setting how='left'
+    output2 = pd.merge(data1, data2, 
+                    on='timestamp', 
+                    how='left')
+
+    # converting data frame to csv
+    output2.to_csv('Stock_Growth/csv_files/temp_stk6.csv', index=False)
+
+    # conver NaN values to 0
+    df3 = pd.read_csv('Stock_Growth/csv_files/temp_stk6.csv')
+    df3.fillna(0,inplace=True)
+    df3.to_csv('Stock_Growth/csv_files/temp_stk7.csv', index=False)
+
+    # Calculate inflation
+    base_value = 1
+    c = []
+    df1 = pd.read_csv('Stock_Growth/csv_files/temp_stk7.csv')
+    for i in range(len(df1['current value'])):
+        base_value = base_value - (df1['value'][i] / 100)
+        c.append(base_value)
+    df1['inflation'] = c
+    df1.to_csv('Stock_Growth/csv_files/temp_stk8.csv', index=False)
+
+    # Calculate value_afi
+    base_value = 0
+    c = []
+    df1 = pd.read_csv('Stock_Growth/csv_files/temp_stk8.csv')
+    for i in range(len(df1['current value'])):
+        base_value = df1['current value'][i] * df1['inflation'][i]
+        c.append(base_value)
+    df1['value_afi'] = c
+    df1.to_csv('Stock_Growth/csv_files/temp_stk9.csv', index=False)
 
     # Append each individual stock pull to master "temp.csv" file
-    csv_list = ['Stock_Growth/csv_files/temp_stk3.csv']
+    csv_list = ['Stock_Growth/csv_files/temp_stk9.csv']
    
     for csv_file in csv_list:
         df = pd.read_csv(csv_file)
         df.to_csv('Stock_Growth/csv_files/temp.csv', mode ='a', header=False, index=False)
 
-#Delete blank rows
-df = pd.read_csv('Stock_Growth/csv_files/temp.csv')
-df.dropna(axis=0, how='all',inplace=True)
-df.to_csv('Stock_Growth/csv_files/temp1.csv', index=False)
-
-data = pd.read_csv('Stock_Growth/csv_files/temp1.csv')
-df.head(2)
-df=df.drop(['open', 'high', 'low' , 'adjusted close' , 'volume'],axis=1)
-
-df.to_csv('Stock_Growth/csv_files/temp2.csv', index=False)
-
-#Change Date Formatting
-with open("Stock_Growth/csv_files/temp2.csv", 'r') as source:
-    with open("Stock_Growth/csv_files/temp3.csv", 'w') as result:
-        writer = csv.writer(result, lineterminator='\n')
-        reader = csv.reader(source)
-        source.readline()
-        for row in reader:
-            ts = dt.datetime.strptime(row[0], "%Y-%m-%d").strftime("%Y-%m")
-            
-            row[0]=ts
-            if ts != "":
-                writer.writerow(row)
-source.close()
-result.close()
-
-# read contents of csv file
-file = pd.read_csv("Stock_Growth/csv_files/temp3.csv")  
-# adding header
-headerList = ['timestamp' , 'close' , 'dividend amount' , 'ticker' , 'current value']  
-# converting data frame to csv
-file.to_csv("Stock_Growth/csv_files/temp4.csv", header=headerList, index=False)
-
-# //////////////////////////INFLATION\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-#
-
-# Inflation USD - Pull and save inflation data for US as "temp_inf.csv"
-infl = pd.read_csv("https://www.alphavantage.co/query?function=INFLATION&apikey=" + alpha_key + "&datatype=csv")   
-infl.head()
-
-infl.to_csv('Stock_Growth/csv_files/temp_inf.csv')
-
-#Change Date Formatting
-with open("Stock_Growth/csv_files/temp_inf.csv", 'r') as source:
-    with open("Stock_Growth/csv_files/temp_inf1.csv", 'w') as result:
-        writer = csv.writer(result, lineterminator='\n')
-        reader = csv.reader(source)
-        source.readline()
-        for row in reader:
-            ts = dt.datetime.strptime(row[1], "%Y-%m-%d").strftime("%Y-%m")
-            
-            row[1]=ts
-            if ts != "":
-                writer.writerow(row)
-source.close()
-result.close()
-
-# read contents of csv file
-file = pd.read_csv("Stock_Growth/csv_files/temp_inf1.csv")  
-# adding header
-headerList = ['sort' , 'timestamp' , 'value']  
-# converting data frame to csv
-file.to_csv("Stock_Growth/csv_files/temp_inf3.csv", header=headerList, index=False)
-
-# /////////////////////////// MERGED \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-# Merge Stock and Inflation data
-data1 = pd.read_csv('Stock_Growth/csv_files/temp4.csv')
-data2 = pd.read_csv('Stock_Growth/csv_files/temp_inf3.csv')
-  
-# using merge function by setting how='left'
-output2 = pd.merge(data1, data2, 
-                   on='timestamp', 
-                   how='left')
-print(output2)
-# converting data frame to csv
-output2.to_csv('Stock_Growth/csv_files/merged.csv', index=False)
